@@ -458,17 +458,47 @@ async function addBooking() {
     const note = document.getElementById('note').value.trim();
     const rows = document.querySelectorAll('.day-row');
 
-    if (!carType || selectedDates.length === 0 || !pickup || !note || note === user.username + ":") { alert("Required fields missing. Please complete the form."); return; }
+    if (!carType || selectedDates.length === 0 || !pickup || !note || note === user.username + ":") { 
+        alert("Required fields missing. Please complete the form."); 
+        return; 
+    }
 
     const bookingsToSubmit = [];
+    let hasOverlap = false;
+    let overlapDetails = "";
+
     for (let i = 0; i < rows.length; i++) {
         const dateISO = getISODate(selectedDates[i]);
         const slot = rows[i].querySelector('.row-time-slot').value;
         const startTime = rows[i].querySelector('.row-start-time').value;
         const endTime = rows[i].querySelector('.row-end-time').value;
         const dropoff = rows[i].querySelector('.row-dropoff').value.trim();
+        
         if (!dropoff) { alert(`Destination missing for ${selectedDates[i]}`); return; }
+        
         const timeDisplay = slot === 'กำหนดเวลาเอง' ? `${startTime}-${endTime}` : slot;
+        const currentRange = slotToRange(slot, startTime, endTime);
+
+        // --- OVERLAP CHECK LOGIC ---
+        const existingForDate = allBookings.filter(b => 
+            b.status !== 'cancelled' && 
+            getISODate(b.date) === dateISO && 
+            ((b.car_type === carType) || (b.car_type === 'เข้าศูนย์' && b.dropoff === carType) || (carType === 'เข้าศูนย์' && b.car_type === dropoff))
+        );
+
+        for (const existing of existingForDate) {
+            let exStart = "", exEnd = "";
+            if (existing.time_slot.includes('-')) {
+                [exStart, exEnd] = existing.time_slot.split('-');
+            }
+            const existingRange = slotToRange(existing.time_slot, exStart, exEnd);
+            
+            if (checkTimeOverlap(currentRange, existingRange)) {
+                hasOverlap = true;
+                overlapDetails += `- ${dateISO} (${existing.time_slot}) โดยคุณ ${existing.booked_by}\n`;
+            }
+        }
+
         bookingsToSubmit.push({ 
             car_type: carType, 
             date: dateISO, 
@@ -479,6 +509,15 @@ async function addBooking() {
             booked_by: user.username, 
             role: user.role
         });
+    }
+
+    if (hasOverlap) {
+        if (user.role === 'admin') {
+            if (!confirm(`⚠️ พบช่วงเวลาที่จองทับซ้อนกันดังนี้:\n${overlapDetails}\nAdmin ต้องการยืนยันการจองซ้ำ (Bypass) ใช่หรือไม่?`)) return;
+        } else {
+            alert(`❌ ขออภัยครับ ไม่สามารถจองได้เนื่องจากมีการจองทับซ้อนกัน:\n${overlapDetails}`);
+            return;
+        }
     }
 
     if (!confirm(`Process ${bookingsToSubmit.length} booking(s)?`)) return;
