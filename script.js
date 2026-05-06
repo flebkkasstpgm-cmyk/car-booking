@@ -1,5 +1,6 @@
 // --- CONFIGURATION ---
 const API_URL = "https://script.google.com/macros/s/AKfycbxqVCP_2O4tGxIkvr_w9RSlfIkv-Mt0YobXW1-RVpfg4lK5vW9XZ7Cz0UuzEiBfXicC/exec"; 
+const SECRET_KEY = "FLT_INTERNAL_2026";
 
 // --- AUTH LOGIC ---
 let inactivityTimer;
@@ -36,14 +37,21 @@ async function handleLogin() {
     btn.style.opacity = "0.8";
 
     try {
-        const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'login', data: { username: user, password: pass } }) });
+        const response = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify({ 
+                action: 'login', 
+                secret_key: SECRET_KEY,
+                data: { username: user, password: pass } 
+            }) 
+        });
         const result = await response.json();
         if (result.status === "success") { 
             localStorage.setItem('jarvis_user', JSON.stringify(result)); 
             window.location.href = "dashboard.html"; 
         }
         else { 
-            showErrorModal("Invalid username or password. Please verify your credentials.");
+            showErrorModal(result.message || "Invalid username or password. Please verify your credentials.");
             const card = document.querySelector('.login-card');
             if (card) {
                 card.style.animation = 'none';
@@ -111,6 +119,7 @@ async function processChangePassword() {
             method: 'POST', 
             body: JSON.stringify({ 
                 action: 'changePassword', 
+                secret_key: SECRET_KEY,
                 data: { username: user.username, new_password: newPass } 
             }) 
         });
@@ -175,7 +184,13 @@ async function initDashboard() {
 
 async function fetchBookings() {
     try {
-        const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'getBookings' }) });
+        const response = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify({ 
+                action: 'getBookings',
+                secret_key: SECRET_KEY
+            }) 
+        });
         const result = await response.json();
         if (result.status === "success") {
             allBookings = result.data;
@@ -421,6 +436,7 @@ async function processCloseJob(id) {
             method: 'POST', 
             body: JSON.stringify({ 
                 action: 'closeJob', 
+                secret_key: SECRET_KEY,
                 data: { id: id, image_url: imageUrl } 
             }) 
         });
@@ -467,7 +483,16 @@ async function addBooking() {
 
     if (!confirm(`Process ${bookingsToSubmit.length} booking(s)?`)) return;
     try {
-        for (const data of bookingsToSubmit) { await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'addBooking', data }) }); }
+        for (const data of bookingsToSubmit) { 
+            await fetch(API_URL, { 
+                method: 'POST', 
+                body: JSON.stringify({ 
+                    action: 'addBooking', 
+                    secret_key: SECRET_KEY,
+                    data 
+                }) 
+            }); 
+        }
         alert(`Successfully processed all requests.`);
         location.reload();
     } catch (e) { alert("Execution failed: " + e.message); }
@@ -476,7 +501,14 @@ async function addBooking() {
 async function cancelBooking(id) {
     if (!confirm("Cancel this booking?")) return;
     try {
-        const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: 'cancelBooking', data: { id: id } }) });
+        const response = await fetch(API_URL, { 
+            method: 'POST', 
+            body: JSON.stringify({ 
+                action: 'cancelBooking', 
+                secret_key: SECRET_KEY,
+                data: { id: id } 
+            }) 
+        });
         const result = await response.json();
         if (result.status === "success") { alert("Booking cancelled."); await fetchBookings(); }
     } catch (e) { alert("API Communication Error"); } 
@@ -689,6 +721,7 @@ async function saveAdminEdit() {
             method: 'POST', 
             body: JSON.stringify({ 
                 action: 'adminEdit', 
+                secret_key: SECRET_KEY,
                 data 
             }) 
         });
