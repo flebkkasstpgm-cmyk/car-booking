@@ -1,5 +1,5 @@
 // --- CONFIGURATION (JARVIS SECURE MODE) ---
-const _u = "aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J4MnBWemd2aGM3MzJhV2NXbVNRc2VTME5hWDJIT2NBT0JrdmpzNWxDSUpOV29Uamw5b0V1REVuYklYZXJ6OHNOX3ovZXhlYw==";
+const _u = "aHR0cHM6Ly9zY3JpcHQuZ29vZ2xlLmNvbS9tYWNyb3Mvcy9BS2Z5Y2J3NmpNY2hsN2dKZTJhZmhmZFlTWk5VQm9lV2NJWUV2LTdHTUpxMDZ4amY1LW42cVNtWXpjuWhpMGotUVNSdFI2L2V4ZWM=";
 const _k = "RkxUX0lOVEVSTkFMXzIwMjY="; // Secret Key: FLT_INTERNAL_2026
 const API_URL = atob(_u);
 const SECRET_KEY = atob(_k);
@@ -225,6 +225,16 @@ function slotToRange(slot, customStart = "", customEnd = "") {
     if (slot === 'เช้า') return { start: 510, end: 720 }; // 08:30 - 12:00
     if (slot === 'บ่าย') return { start: 780, end: 1020 }; // 13:00 - 17:00
     if (slot === 'ทั้งวัน') return { start: 510, end: 1020 }; // 08:30 - 17:00
+    
+    // จัดการกรณีช่วงเวลาที่บันทึกมาในรูปแบบ "HH:mm-HH:mm"
+    if (slot && slot.includes('-')) {
+        const parts = slot.split('-').map(t => timeToMinutes(t.trim()));
+        let s = parts[0];
+        let e = parts[1];
+        if (e < s) e += 1440; 
+        return { start: s, end: e };
+    }
+
     if (slot === 'กำหนดเวลาเอง' && customStart && customEnd) {
         let start = timeToMinutes(customStart);
         let end = timeToMinutes(customEnd);
@@ -244,8 +254,17 @@ function getOccupiedTimes(date, carType) {
     return allBookings.filter(b => {
         if (b.status === 'cancelled') return false;
         if (getISODate(b.date) !== date) return false;
-        const isThisCarUsed = (b.car_type === carType) || (b.car_type === 'เข้าศูนย์' && b.dropoff === carType);
-        return isThisCarUsed;
+        
+        // ค้นหาว่ารถคันจริงๆ ที่ถูกใช้งานคือคันไหน
+        const existingCar = b.car_type === 'เข้าศูนย์' ? b.dropoff.trim() : b.car_type.trim();
+        
+        // กรณีปกติ: เช็คว่ารถคันเดียวกันไหม
+        if (existingCar === carType) return true;
+        
+        // กรณีพิเศษ: ถ้าเรากำลังจองรถคันที่ตรงกับรายการรถเข้าศูนย์
+        if (carType === 'เข้าศูนย์') return true; 
+
+        return false;
     }).map(b => b.time_slot);
 }
 
@@ -471,6 +490,25 @@ async function addBooking() {
         const dropoff = rows[i].querySelector('.row-dropoff').value.trim();
         if (!dropoff) { alert(`Destination missing for ${selectedDates[i]}`); return; }
         const timeDisplay = slot === 'กำหนดเวลาเอง' ? `${startTime}-${endTime}` : slot;
+        
+        // --- 🛡️ การตรวจสอบจองซ้ำขั้นสูง (Client-side) ---
+        const newRange = slotToRange(slot, startTime, endTime);
+        const actualCar = carType === 'เข้าศูนย์' ? dropoff : carType;
+
+        const isConflict = allBookings.some(b => {
+            if (b.status === 'cancelled' || getISODate(b.date) !== dateISO) return false;
+            const existingCar = b.car_type === 'เข้าศูนย์' ? b.dropoff.trim() : b.car_type.trim();
+            if (existingCar !== actualCar) return false;
+            
+            const existingRange = slotToRange(b.time_slot);
+            return checkTimeOverlap(newRange, existingRange);
+        });
+
+        if (isConflict) {
+            alert(`⚠️ ขออภัย! รถ [${actualCar}] ในวันที่ ${selectedDates[i]} ช่วงเวลา [${timeDisplay}] มีการใช้งานซ้อนกันครับ`);
+            return;
+        }
+
         bookingsToSubmit.push({ 
             car_type: carType, 
             date: dateISO, 
@@ -483,19 +521,15 @@ async function addBooking() {
         });
     }
 
-    if (!confirm(`Process ${bookingsToSubmit.length} booking(s)?`)) return;
+    if (!confirm(`ยืนยันการจองทั้งหมด ${bookingsToSubmit.length} รายการ?`)) return;
     try {
         for (const data of bookingsToSubmit) { 
             await fetch(API_URL, { 
                 method: 'POST', 
-                body: JSON.stringify({ 
-                    action: 'addBooking', 
-                    secret_key: SECRET_KEY,
-                    data 
-                }) 
+                body: JSON.stringify({ action: 'addBooking', secret_key: SECRET_KEY, data }) 
             }); 
         }
-        alert(`Successfully processed all requests.`);
+        alert(`ดำเนินการเรียบร้อยแล้วครับ`);
         location.reload();
     } catch (e) { alert("Execution failed: " + e.message); }
 }
