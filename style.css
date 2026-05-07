@@ -159,19 +159,47 @@ button {
     border: none;
     cursor: pointer;
     transition: var(--transition);
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 10px;
+    position: relative;
 }
 
-button:hover {
+button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.btn-spinner {
+    display: none;
+    width: 20px;
+    height: 20px;
+    border: 2.5px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+button.loading span:not(.btn-spinner) {
+    display: none;
+}
+
+button.loading .btn-spinner {
+    display: flex;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+button:hover:not(:disabled) {
     background: #003d7a;
     transform: translateY(-1px);
     box-shadow: 0 4px 12px rgba(0, 45, 85, 0.2);
 }
 
-button:active { transform: translateY(0); }
+button:active:not(:disabled) { transform: translateY(0); }
 
 #login-btn { margin: 10px 25px; width: calc(100% - 50px); }
 
@@ -224,26 +252,103 @@ td { padding: 18px 20px; font-size: 0.9rem; border-bottom: 1px solid #F0F3F5; }
 tr:last-child td { border-bottom: none; }
 tr:hover td { background-color: #F9FAFB; }
 
-/* Badges */
+/* Badges & Animations */
 .status-badge {
     padding: 6px 14px;
-    border-radius: 6px;
+    border-radius: 20px;
     font-size: 0.75rem;
-    font-weight: 700;
+    font-weight: 800;
     display: inline-flex;
     align-items: center;
     gap: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
 }
 
-.status-pending { background: var(--pending-bg); color: var(--pending-text); }
-.status-completed { background: var(--completed-bg); color: var(--completed-text); }
-.status-leave { background: var(--error-bg); color: var(--error-text); border: 1px solid rgba(215, 58, 73, 0.2); }
-.status-maintenance { background: #F1F2F4; color: #444D56; }
+.status-pending { 
+    background: #FFFBE6; color: #D48806; border: 1px solid #FFE58F;
+    animation: pulse-gold 2.5s infinite;
+}
+@keyframes pulse-gold {
+    0% { box-shadow: 0 0 0 0 rgba(212, 136, 6, 0.4); }
+    70% { box-shadow: 0 0 0 8px rgba(212, 136, 6, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(212, 136, 6, 0); }
+}
+
+.status-completed { 
+    background: #F6FFED; color: #389E0D; border: 1px solid #B7EB8F;
+    animation: glow-green 3s infinite;
+}
+@keyframes glow-green {
+    0%, 100% { transform: scale(1); filter: brightness(1); }
+    50% { transform: scale(1.03); filter: brightness(1.1); box-shadow: 0 0 10px rgba(56, 158, 13, 0.2); }
+}
+
+.status-leave { 
+    background: #FFF7E6; color: #D46B08; border: 1px solid #FFD591;
+    animation: pulse-orange 2s infinite;
+}
+@keyframes pulse-orange {
+    0% { box-shadow: 0 0 0 0 rgba(212, 107, 8, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(212, 107, 8, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(212, 107, 8, 0); }
+}
+
+.status-maintenance { 
+    background: #F0F5FF; color: #1D39C4; border: 1px solid #ADC6FF;
+    animation: pulse-blue 3s infinite;
+}
+@keyframes pulse-blue {
+    0% { box-shadow: 0 0 0 0 rgba(29, 57, 196, 0.2); }
+    70% { box-shadow: 0 0 0 8px rgba(29, 57, 196, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(29, 57, 196, 0); }
+}
+
+.status-expired { 
+    background: #FFF1F0; color: #F5222D; border: 1px solid #FFA39E; 
+    animation: pulse-red 1.5s infinite; 
+}
+@keyframes pulse-red {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 34, 45, 0.5); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(245, 34, 45, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 34, 45, 0); }
+}
 
 /* Actions */
-.btn-evidence { background: var(--primary-light); color: var(--primary); padding: 6px 12px; font-size: 0.8rem; border-radius: 6px; }
-.btn-cancel { background: transparent; color: var(--text-sub); border: 1px solid var(--border); padding: 6px 12px; font-size: 0.8rem; }
+.action-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    justify-content: center;
+    min-width: 160px;
+}
+
+.action-row {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    width: 100%;
+}
+
+.action-container button {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    flex: 1;
+    min-width: 85px;
+    height: 36px;
+    white-space: nowrap;
+}
+
+.btn-evidence { background: var(--primary-light); color: var(--primary); border: 1px solid rgba(0, 45, 85, 0.1); }
+.btn-cancel { background: transparent; color: var(--text-sub); border: 1px solid var(--border); }
 .btn-cancel:hover { background: var(--error-bg); color: var(--error-text); border-color: var(--error-text); }
+.btn-close-job { background: var(--completed-text); color: white; width: 100%; }
+.btn-proof { background: #EEF2F4; color: var(--text-main); border: 1px solid var(--border); width: 100%; }
+
+/* Admin specific overrides for button group */
+.admin-actions { width: 100%; }
+
 
 /* Day Rows in Booking Form */
 .day-row {

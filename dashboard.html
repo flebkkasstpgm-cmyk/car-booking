@@ -25,13 +25,18 @@
                 </div>
             </div>
             <div style="display: flex; gap: 12px; align-items: center;">
-                <button id="admin-export-btn" onclick="exportData()" class="btn-export" style="display: none; height: 40px; font-size: 0.85rem;">
+                <button id="admin-export-btn" onclick="exportData(this)" class="btn-export" style="display: none; height: 40px; font-size: 0.85rem;">
                     <span>Export Report (.txt)</span>
+                    <span class="btn-spinner"></span>
                 </button>
-                <button onclick="openChangePasswordModal()" class="btn-logout" style="height: 40px; font-size: 0.85rem; border-color: var(--primary) !important; color: var(--primary) !important;">
+                <button onclick="openChangePasswordModal(this)" class="btn-logout" style="height: 40px; font-size: 0.85rem; border-color: var(--primary) !important; color: var(--primary) !important;">
                     <span>Change Password</span>
+                    <span class="btn-spinner"></span>
                 </button>
-                <button onclick="logout()" class="btn-logout" style="height: 40px; font-size: 0.85rem;">Logout</button>
+                <button onclick="logout(this)" class="btn-logout" style="height: 40px; font-size: 0.85rem;">
+                    <span>Logout</span>
+                    <span class="btn-spinner"></span>
+                </button>
             </div>
         </header>
 
@@ -42,7 +47,6 @@
         <!-- Change Password Modal -->
         <div id="password-modal" class="loading-overlay" style="z-index: 10001; display: none;">
             <div class="card" style="max-width: 380px; padding: 40px 30px; animation: zoomIn 0.25s; border-radius: 16px; text-align: center;">
-                <div style="font-size: 2rem; margin-bottom: 15px;">🔐</div>
                 <h2 style="color: var(--primary); margin-bottom: 25px; font-weight: 800; font-size: 1.3rem;">Update Password</h2>
                 <div class="form-group" style="padding: 0; margin-bottom: 15px;">
                     <label>New Password</label>
@@ -53,8 +57,14 @@
                     <input type="password" id="confirm-password" placeholder="Repeat new password" required>
                 </div>
                 <div style="display: flex; gap: 10px;">
-                    <button onclick="processChangePassword()" style="flex: 2;">Save Password</button>
-                    <button onclick="closeChangePasswordModal()" style="flex: 1; background: #F1F2F4; color: var(--text-main);">Cancel</button>
+                    <button onclick="processChangePassword(this)" style="flex: 2;">
+                        <span>Save Password</span>
+                        <span class="btn-spinner"></span>
+                    </button>
+                    <button onclick="closeChangePasswordModal(this)" style="flex: 1; background: #F1F2F4; color: var(--text-main);">
+                        <span>Cancel</span>
+                        <span class="btn-spinner"></span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -64,7 +74,6 @@
             <div class="card" style="border-top: 4px solid var(--primary);">
                 <h3 onclick="toggleBookingForm()" style="cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #FCFDFF;">
                     <div style="display: flex; align-items: center; gap: 10px;">
-                        <span style="font-size: 1.2rem;">📝</span>
                         <span>Create New Booking</span>
                     </div>
                     <span id="fold-icon" style="font-size: 0.8rem; opacity: 0.5;">▼</span>
@@ -93,17 +102,18 @@
                     <div class="filters" style="margin-top: 10px; background: transparent; border-bottom: none; border-top: 1.5px dashed var(--border); padding-top: 30px;">
                         <div class="form-group" style="padding: 0; flex: 2;">
                             <label class="required" id="pickup-label">Destination / Location</label>
-                            <input type="text" id="pickup" placeholder="e.g. Suvarnabhumi Airport" style="flex: 1;" onkeypress="if(event.key === 'Enter') addBooking()">
+                            <input type="text" id="pickup" placeholder="e.g. Suvarnabhumi Airport" style="flex: 1;" onkeypress="if(event.key === 'Enter') addBooking(document.getElementById('book-btn'))">
                         </div>
-                        <div class="form-group" style="padding: 0; flex: 1;">
-                            <label id="note-label">Booked By (Staff Name)</label>
-                            <input type="text" id="note" onkeypress="if(event.key === 'Enter') addBooking()">
+                        <div class="form-group" id="booked-by-group" style="padding: 0; flex: 1;">
+                            <label class="required" id="note-label">Booked By (Staff Name)</label>
+                            <input type="text" id="note" onkeypress="if(event.key === 'Enter') addBooking(document.getElementById('book-btn'))">
                         </div>
                     </div>
                     
                     <div style="margin-top: 10px; display: flex; justify-content: flex-end; padding: 0 25px;">
-                        <button id="book-btn" onclick="addBooking()" style="width: auto; min-width: 220px; background: var(--accent);">
-                            Confirm All Bookings
+                        <button id="book-btn" onclick="addBooking(this)" style="width: auto; min-width: 220px; background: var(--accent);">
+                            <span>Confirm All Bookings</span>
+                            <span class="btn-spinner"></span>
                         </button>
                     </div>
                 </div>
@@ -113,7 +123,6 @@
         <!-- Dashboard Data Section -->
         <div class="card animate-fade" style="animation-delay: 0.1s;">
             <h3 style="background: #FCFDFF;">
-                <span style="font-size: 1.2rem;">📅</span>
                 <span>Vehicle Schedule Monitor</span>
             </h3>
             
@@ -223,14 +232,23 @@
                     <label style="margin-bottom: 12px; text-align: center;">Evidence Attachment</label>
                     <div style="text-align: center;">
                         <img id="edit-img-preview" src="" style="max-width: 100%; border-radius: 8px; box-shadow: var(--shadow-sm);">
-                        <button onclick="clearImageInModal()" style="background: transparent; border: 1.5px solid var(--accent); color: var(--accent); margin-top: 15px; width: auto; padding: 8px 20px; font-size: 0.8rem; margin-inline: auto;">Remove Image</button>
+                        <button onclick="clearImageInModal(this)" style="background: transparent; border: 1.5px solid var(--accent); color: var(--accent); margin-top: 15px; width: auto; padding: 8px 20px; font-size: 0.8rem; margin-inline: auto;">
+                            <span>Remove Image</span>
+                            <span class="btn-spinner"></span>
+                        </button>
                         <input type="hidden" id="edit-image-action" value="keep">
                     </div>
                 </div>
 
                 <div style="display: flex; gap: 12px; padding: 0 25px; margin-top: 10px;">
-                    <button onclick="saveAdminEdit()" style="flex: 2;">Save Changes</button>
-                    <button onclick="closeEditModal()" style="flex: 1; background: #F1F2F4; color: var(--text-main);">Cancel</button>
+                    <button onclick="saveAdminEdit(this)" style="flex: 2;">
+                        <span>Save Changes</span>
+                        <span class="btn-spinner"></span>
+                    </button>
+                    <button onclick="closeEditModal(this)" style="flex: 1; background: #F1F2F4; color: var(--text-main);">
+                        <span>Cancel</span>
+                        <span class="btn-spinner"></span>
+                    </button>
                 </div>
             </div>
         </div>

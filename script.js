@@ -7,9 +7,13 @@ let inactivityTimer;
 const LOGOUT_TIME = 5 * 60 * 1000; // 5 นาที
 
 function resetInactivityTimer() {
+    // Check if current page is login page (index.html or root)
+    const isLoginPage = window.location.pathname.endsWith('index.html') || window.location.pathname.endsWith('/') || !window.location.pathname.includes('.html');
+    if (isLoginPage) return;
+
     clearTimeout(inactivityTimer);
     inactivityTimer = setTimeout(() => {
-        alert("Session Expired: ท่านไม่ได้ใช้งานเกิน 5 นาที ระบบจะออกจากระบบอัตโนมัติเพื่อความปลอดภัยครับ");
+        alert("Session Expired: You have been inactive for more than 5 minutes. The system will log you out automatically for security purposes.");
         logout();
     }, LOGOUT_TIME);
 }
@@ -19,22 +23,22 @@ function resetInactivityTimer() {
     document.addEventListener(evt, resetInactivityTimer, true);
 });
 
-async function handleLogin() {
+async function handleLogin(btn) {
     const user = document.getElementById('username').value;
     const pass = document.getElementById('password').value;
-    const btn = document.getElementById('login-btn');
+    const loginBtn = btn || document.getElementById('login-btn');
     const btnText = document.getElementById('btn-text');
-    const btnSpinner = document.getElementById('btn-spinner');
 
     if (!user || !pass) { 
         showErrorModal("Please enter both username and password.");
         return; 
     }
     
-    btn.disabled = true;
-    btnText.innerText = "Authenticating...";
-    btnSpinner.style.display = "block";
-    btn.style.opacity = "0.8";
+    if (loginBtn) {
+        loginBtn.disabled = true;
+        loginBtn.classList.add('loading');
+    }
+    if (btnText) btnText.innerText = "Authenticating...";
 
     try {
         const response = await fetch(API_URL, { 
@@ -62,10 +66,11 @@ async function handleLogin() {
     } catch (e) { 
         showErrorModal("Connection Error: Unable to reach the server. Please check your internet."); 
     } finally {
-        btn.disabled = false;
-        btnText.innerText = "Sign In";
-        btnSpinner.style.display = "none";
-        btn.style.opacity = "1";
+        if (loginBtn) {
+            loginBtn.disabled = false;
+            loginBtn.classList.remove('loading');
+        }
+        if (btnText) btnText.innerText = "Sign In";
     }
 }
 
@@ -78,31 +83,44 @@ function showErrorModal(msg) {
     }
 }
 
-function closeErrorModal() {
+function closeErrorModal(btn) {
+    if (btn) {
+        btn.classList.add('loading');
+        setTimeout(() => btn.classList.remove('loading'), 300);
+    }
     const modal = document.getElementById('error-modal');
     if (modal) modal.style.display = 'none';
     const passInput = document.getElementById('password');
     if (passInput) { passInput.value = ""; passInput.focus(); }
 }
 
-function logout() { 
+function logout(btn) { 
+    if (btn) btn.classList.add('loading');
     clearTimeout(inactivityTimer);
     localStorage.removeItem('jarvis_user'); 
-    window.location.href = "index.html"; 
+    setTimeout(() => { window.location.href = "index.html"; }, 300);
 }
 
 // --- PASSWORD MANAGEMENT ---
-function openChangePasswordModal() {
+function openChangePasswordModal(btn) {
+    if (btn) {
+        btn.classList.add('loading');
+        setTimeout(() => btn.classList.remove('loading'), 400);
+    }
     document.getElementById('password-modal').style.display = 'flex';
 }
 
-function closeChangePasswordModal() {
+function closeChangePasswordModal(btn) {
+    if (btn) {
+        btn.classList.add('loading');
+        setTimeout(() => btn.classList.remove('loading'), 300);
+    }
     document.getElementById('password-modal').style.display = 'none';
     document.getElementById('new-password').value = "";
     document.getElementById('confirm-password').value = "";
 }
 
-async function processChangePassword() {
+async function processChangePassword(btn) {
     const newPass = document.getElementById('new-password').value;
     const confirmPass = document.getElementById('confirm-password').value;
     const userJson = localStorage.getItem('jarvis_user');
@@ -113,6 +131,8 @@ async function processChangePassword() {
     if (newPass !== confirmPass) { alert("รหัสผ่านไม่ตรงกันครับ กรุณาตรวจสอบอีกครั้ง"); return; }
 
     if (!confirm("ยืนยันการเปลี่ยนรหัสผ่านใหม่?")) return;
+    
+    if (btn) btn.classList.add('loading');
 
     try {
         const response = await fetch(API_URL, { 
@@ -132,6 +152,8 @@ async function processChangePassword() {
         }
     } catch (e) {
         alert("เกิดข้อผิดพลาดในการเชื่อมต่อ API");
+    } finally {
+        if (btn) btn.classList.remove('loading');
     }
 }
 
@@ -169,17 +191,14 @@ async function initDashboard() {
 
     if (user.role === 'user' || user.role === 'admin') {
         document.getElementById('user-section').style.display = "block";
-        if (user.role === 'user') {
-            const noteInput = document.getElementById('note');
-            const prefix = user.username + ": ";
-            noteInput.value = prefix;
-            noteInput.addEventListener('input', function() { if (!this.value.startsWith(prefix)) this.value = prefix; });
-        }
     }
 
     const carSelect = document.getElementById('car_type');
     if (carSelect) { carSelect.addEventListener('change', updateBookingRows); }
     await fetchBookings();
+
+    // --- REAL-TIME UPDATE (Every 30 seconds) ---
+    setInterval(fetchBookings, 30000);
 }
 
 async function fetchBookings() {
@@ -351,42 +370,114 @@ function renderBookings() {
 
     filtered.forEach(b => {
         const tr = document.createElement('tr');
+        const [y, m, d] = getISODate(b.date).split('-');
+        
+        // --- EXPIRY CHECK ---
+        let isExpired = false;
+        const now = new Date();
+        const todayStr = getISODate(now);
+        const bookingDateStr = getISODate(b.date);
+        
+        if (bookingDateStr < todayStr) {
+            isExpired = true;
+        } else if (bookingDateStr === todayStr) {
+            let startT = "", endT = "";
+            let slotType = b.time_slot;
+            if (b.time_slot.includes('-')) {
+                slotType = 'กำหนดเวลาเอง';
+                [startT, endT] = b.time_slot.split('-');
+            }
+            const range = slotToRange(slotType, startT, endT);
+            const currentMin = now.getHours() * 60 + now.getMinutes();
+            if (range && currentMin > range.end) isExpired = true;
+        }
+
         let statusClass = b.status === 'completed' ? 'status-completed' : 'status-pending';
         let statusText = b.status === 'completed' ? 'COMPLETED' : 'PENDING';
+        
+        if (b.status === 'pending' && isExpired) {
+            statusClass = 'status-expired';
+            statusText = 'EXPIRED';
+        }
+
         if (b.car_type === 'หยุดงาน') { statusText = "LEAVE"; statusClass = "status-leave"; }
         else if (b.car_type === 'เข้าศูนย์') { statusText = "MAINTENANCE"; statusClass = "status-maintenance"; }
 
-        const [y, m, d] = getISODate(b.date).split('-');
-        let actionBtn = "";
+        let actionContent = "";
         
         if (currentUser.role === 'admin') {
-            actionBtn = `<div style="display:flex; gap:8px; justify-content:center;"><button class="btn-evidence" style="background:var(--primary); color:white;" onclick="openEditModal('${b.id}')">Edit</button><button class="btn-cancel" onclick="cancelBooking('${b.id}')">Cancel</button></div>`;
+            let finishBtn = "";
+            if (b.status === 'pending') {
+                finishBtn = `<button class="btn-close-job" onclick="processCloseJob('${b.id}', this)">
+                    <span>Finish Job</span>
+                    <span class="btn-spinner"></span>
+                </button>`;
+            }
+
+            actionContent = `
+                <div class="action-row">
+                    <button class="btn-evidence" style="background:var(--primary); color:white;" onclick="openEditModal('${b.id}', this)">
+                        <span>Edit</span>
+                        <span class="btn-spinner"></span>
+                    </button>
+                    <button class="btn-cancel" onclick="cancelBooking('${b.id}', this)">
+                        <span>Cancel</span>
+                        <span class="btn-spinner"></span>
+                    </button>
+                </div>
+                ${finishBtn}
+            `;
         } 
-        else if (b.status === 'pending' && b.booked_by === currentUser.username) {
-            actionBtn = `<button class="btn-cancel" onclick="cancelBooking('${b.id}')">Cancel</button>`;
+        else if (statusText !== 'EXPIRED') {
+            let cancelBtn = "";
+            if (b.status === 'pending' && b.booked_by === currentUser.username) {
+                cancelBtn = `<button class="btn-cancel" onclick="cancelBooking('${b.id}', this)">
+                    <span>Cancel</span>
+                    <span class="btn-spinner"></span>
+                </button>`;
+            }
+
+            let finishBtn = "";
+            let canClose = false;
+            if (b.status === 'pending') {
+                if (currentUser.role === 'driver1' && (b.car_type === 'VIOS' || b.car_type === 'BYD') && b.dropoff.includes('คนขับ')) canClose = true;
+                else if (b.booked_by === currentUser.username) canClose = true;
+            }
+
+            if (canClose) {
+                finishBtn = `<button class="btn-close-job" onclick="processCloseJob('${b.id}', this)">
+                    <span>Finish Job</span>
+                    <span class="btn-spinner"></span>
+                </button>`;
+            }
+            
+            if (cancelBtn || finishBtn) {
+                actionContent = `
+                    ${cancelBtn ? `<div class="action-row">${cancelBtn}</div>` : ""}
+                    ${finishBtn}
+                `;
+            }
         }
 
-        let canClose = false;
-        if (b.status === 'pending') {
-            // 1. Admin ปิดได้ทุกงาน
-            if (currentUser.role === 'admin') canClose = true;
-            // 2. คนขับ (Driver1) ปิดงาน VIOS/BYD เฉพาะกรณีที่ระบุว่า "ใช้คนขับ"
-            else if (currentUser.role === 'driver1' && (b.car_type === 'VIOS' || b.car_type === 'BYD') && b.dropoff.includes('คนขับ')) canClose = true;
-            // 3. User ปิดงานตัวเองได้เฉพาะกรณี "ขับเอง"
-            else if (currentUser.role === 'user' && b.booked_by === currentUser.username && b.dropoff.includes('ขับเอง')) canClose = true;
+        if (b.image_url) {
+            actionContent += `
+                <button class="btn-proof" onclick="viewImage('${b.id}', this)">
+                    <span>Proof</span>
+                    <span class="btn-spinner"></span>
+                </button>
+            `;
         }
 
-        if (canClose) {
-            actionBtn += `<button class="btn-close-job" style="margin-top:5px; background:var(--completed-text); color:white;" onclick="openCloseJobModal('${b.id}')">Finish Job</button>`;
-        }
+        const actionBtn = actionContent ? `<div class="action-container">${actionContent}</div>` : "-";
 
-        if (b.image_url) actionBtn += `<button class="btn-evidence" style="margin-top:5px" onclick="viewImage('${b.id}')">Proof</button>`;
+        // Clean note for display (remove username prefix if present)
+        const noteDisplay = b.note.includes(': ') ? b.note.split(': ')[1] : b.note;
 
         tr.innerHTML = `
             <td><span style="font-weight:700; color:var(--primary);">${b.car_type}</span></td>
             <td><div style="font-weight:600;">${d}/${m}/${y}</div><div style="font-size:0.75rem; color:var(--text-sub);">${b.time_slot}</div></td>
             <td><div style="font-weight:500;">${b.pickup}</div><div style="font-size:0.75rem; color:var(--text-sub);">${b.dropoff}</div></td>
-            <td><span style="font-size:0.85rem; font-weight:600;">${b.booked_by}</span></td>
+            <td><div style="font-weight:600; font-size:0.85rem;">${noteDisplay}</div><div style="font-size:0.7rem; color:var(--text-sub);">Booked by: ${b.booked_by}</div></td>
             <td><span class="status-badge ${statusClass}">${statusText}</span></td>
             <td style="text-align:center;">${actionBtn || "-"}</td>
         `;
@@ -395,41 +486,10 @@ function renderBookings() {
 }
 
 // --- CLOSE JOB LOGIC ---
-function openCloseJobModal(id) {
-    const b = allBookings.find(x => x.id === id);
-    if (!b) return;
+async function processCloseJob(id, btn) {
+    if (!confirm("Confirm to finish this job?")) return;
     
-    let modal = document.getElementById('close-job-modal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'close-job-modal';
-        modal.className = 'loading-overlay';
-        modal.innerHTML = `
-            <div class="card" style="max-width: 400px; padding: 30px; animation: zoomIn 0.25s;">
-                <h3 style="border:none; padding:0; margin-bottom:20px;">🎉 Finish Job</h3>
-                <p style="font-size:0.9rem; color:var(--text-sub); margin-bottom:20px;">โปรดอัปโหลดรูปภาพหลักฐานการใช้งาน (ถ้ามี) เพื่อจบงานนี้ครับ</p>
-                <input type="file" id="job-image" accept="image/*" style="margin-bottom:20px; font-size:0.8rem;">
-                <div style="display:flex; gap:10px;">
-                    <button id="confirm-finish-btn" style="flex:2;">Confirm Finish</button>
-                    <button onclick="document.getElementById('close-job-modal').style.display='none'" style="flex:1; background:#F1F2F4; color:var(--text-main);">Cancel</button>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-    }
-    
-    modal.style.display = 'flex';
-    document.getElementById('confirm-finish-btn').onclick = () => processCloseJob(id);
-}
-
-async function processCloseJob(id) {
-    const fileInput = document.getElementById('job-image');
-    let imageUrl = "";
-
-    if (fileInput.files.length > 0) {
-        const file = fileInput.files[0];
-        imageUrl = "Uploaded via Mobile/Web"; 
-    }
+    if (btn) btn.classList.add('loading');
 
     try {
         const response = await fetch(API_URL, { 
@@ -437,21 +497,22 @@ async function processCloseJob(id) {
             body: JSON.stringify({ 
                 action: 'closeJob', 
                 secret_key: SECRET_KEY,
-                data: { id: id, image_url: imageUrl } 
+                data: { id: id, image_url: "" } 
             }) 
         });
         const result = await response.json();
         if (result.status === "success") {
-            alert("✅ จบงานเรียบร้อยครับ!");
-            document.getElementById('close-job-modal').style.display = 'none';
+            alert("✅ Job finished successfully!");
             await fetchBookings();
         }
     } catch (e) {
-        alert("เกิดข้อผิดพลาดในการจบงาน: " + e.message);
+        alert("Error finishing job: " + e.message);
+    } finally {
+        if (btn) btn.classList.remove('loading');
     }
 }
 
-async function addBooking() {
+async function addBooking(btn) {
     const user = JSON.parse(localStorage.getItem('jarvis_user'));
     const carType = document.getElementById('car_type').value;
     const pickup = document.getElementById('pickup').value.trim();
@@ -479,7 +540,6 @@ async function addBooking() {
         const timeDisplay = slot === 'กำหนดเวลาเอง' ? `${startTime}-${endTime}` : slot;
         const currentRange = slotToRange(slot, startTime, endTime);
 
-        // --- OVERLAP CHECK LOGIC ---
         const existingForDate = allBookings.filter(b => 
             b.status !== 'cancelled' && 
             getISODate(b.date) === dateISO && 
@@ -521,6 +581,9 @@ async function addBooking() {
     }
 
     if (!confirm(`Process ${bookingsToSubmit.length} booking(s)?`)) return;
+    
+    if (btn) btn.classList.add('loading');
+    
     try {
         for (const data of bookingsToSubmit) { 
             await fetch(API_URL, { 
@@ -535,10 +598,12 @@ async function addBooking() {
         alert(`Successfully processed all requests.`);
         location.reload();
     } catch (e) { alert("Execution failed: " + e.message); }
+    finally { if (btn) btn.classList.remove('loading'); }
 }
 
-async function cancelBooking(id) {
+async function cancelBooking(id, btn) {
     if (!confirm("Cancel this booking?")) return;
+    if (btn) btn.classList.add('loading');
     try {
         const response = await fetch(API_URL, { 
             method: 'POST', 
@@ -551,9 +616,14 @@ async function cancelBooking(id) {
         const result = await response.json();
         if (result.status === "success") { alert("Booking cancelled."); await fetchBookings(); }
     } catch (e) { alert("API Communication Error"); } 
+    finally { if (btn) btn.classList.remove('loading'); }
 }
 
-function exportData() {
+function exportData(btn) {
+    if (btn) {
+        btn.classList.add('loading');
+        setTimeout(() => btn.classList.remove('loading'), 1000);
+    }
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     
@@ -622,11 +692,30 @@ window.onload = () => {
     const isDashboard = window.location.pathname.includes('dashboard.html');
     if (isDashboard) {
         initDashboard();
-        flatpickr("#date", { mode: "multiple", locale: "th", dateFormat: "Y-m-d", altInput: true, altFormat: "j F Y", onChange: (dates) => { selectedDates = dates.map(d => getISODate(d)); updateBookingRows(); } });
+        flatpickr("#date", { 
+            mode: "multiple", 
+            locale: "th", 
+            dateFormat: "Y-m-d", 
+            minDate: "today",
+            altInput: true, 
+            altFormat: "j F Y", 
+            onChange: (dates) => { selectedDates = dates.map(d => getISODate(d)); updateBookingRows(); } 
+        });
         flatpickr("#filter-date", { locale: "th", dateFormat: "Y-m-d", defaultDate: getISODate(new Date()), altInput: true, altFormat: "j F Y", onChange: () => renderBookings() });
+
+        // Add listener for Admin Edit Modal car type change
+        const editCarSelect = document.getElementById('edit-car-type');
+        if (editCarSelect) {
+            editCarSelect.addEventListener('change', updateEditModalLabels);
+        }
     } else {
         const userJson = localStorage.getItem('jarvis_user');
-        if (userJson) window.location.href = "dashboard.html";
+        if (userJson) {
+            window.location.href = "dashboard.html";
+        } else {
+            const userField = document.getElementById('username');
+            if (userField) userField.focus();
+        }
     }
 };
 
@@ -670,7 +759,11 @@ function updateEditModalLabels() {
     }
 }
 
-function openEditModal(id) {
+function openEditModal(id, btn) {
+    if (btn) {
+        btn.classList.add('loading');
+        setTimeout(() => btn.classList.remove('loading'), 400);
+    }
     const b = allBookings.find(x => x.id === id);
     if (!b) return;
 
@@ -681,16 +774,13 @@ function openEditModal(id) {
     document.getElementById('edit-pickup').value = b.pickup;
     document.getElementById('edit-booked-by').value = b.booked_by;
 
-    // Update labels and options first
     updateEditModalLabels();
     
-    // Set dropoff value (if matches option)
     const dropoffSelect = document.getElementById('edit-dropoff');
     const options = Array.from(dropoffSelect.options).map(o => o.value);
     if (options.includes(b.dropoff)) {
         dropoffSelect.value = b.dropoff;
     } else {
-        // If not in select (like old data), add it as an option
         const newOpt = document.createElement('option');
         newOpt.value = b.dropoff;
         newOpt.textContent = b.dropoff;
@@ -724,18 +814,24 @@ function openEditModal(id) {
     document.getElementById('edit-modal').style.display = 'flex';
 }
 
-function closeEditModal() {
+function closeEditModal(btn) {
+    if (btn) {
+        btn.classList.add('loading');
+        setTimeout(() => btn.classList.remove('loading'), 300);
+    }
     document.getElementById('edit-modal').style.display = 'none';
 }
 
-function clearImageInModal() {
+function clearImageInModal(btn) {
     if (confirm("ต้องการลบรูปภาพหลักฐานนี้ออกใช่หรือไม่?")) {
+        if (btn) btn.classList.add('loading');
         document.getElementById('edit-image-action').value = "delete";
         document.getElementById('edit-image-section').style.display = "none";
+        if (btn) setTimeout(() => btn.classList.remove('loading'), 300);
     }
 }
 
-async function saveAdminEdit() {
+async function saveAdminEdit(btn) {
     const slot = document.getElementById('edit-time-slot').value;
     const startTime = document.getElementById('edit-start-time').value;
     const endTime = document.getElementById('edit-end-time').value;
@@ -754,6 +850,8 @@ async function saveAdminEdit() {
     };
 
     if (!confirm("ยืนยันการบันทึกการเปลี่ยนแปลง?")) return;
+    
+    if (btn) btn.classList.add('loading');
 
     try {
         const response = await fetch(API_URL, { 
@@ -774,7 +872,16 @@ async function saveAdminEdit() {
         }
     } catch (e) {
         alert("เกิดข้อผิดพลาดในการเชื่อมต่อ API");
+    } finally {
+        if (btn) btn.classList.remove('loading');
     }
 }
 
-function viewImage(id) { const b = allBookings.find(x => x.id === id); if (b && b.image_url) window.open().document.write(`<img src="${b.image_url}" style="max-width:100%">`); }
+function viewImage(id, btn) { 
+    if (btn) {
+        btn.classList.add('loading');
+        setTimeout(() => btn.classList.remove('loading'), 400);
+    }
+    const b = allBookings.find(x => x.id === id); 
+    if (b && b.image_url) window.open().document.write(`<img src="${b.image_url}" style="max-width:100%">`); 
+}
