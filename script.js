@@ -197,8 +197,8 @@ async function initDashboard() {
     if (carSelect) { carSelect.addEventListener('change', updateBookingRows); }
     await fetchBookings();
 
-    // --- REAL-TIME UPDATE (Every 30 seconds) ---
-    setInterval(fetchBookings, 30000);
+    // --- REAL-TIME UPDATE (Every 15 seconds for Snappy Feel) ---
+    setInterval(fetchBookings, 15000);
 }
 
 async function fetchBookings() {
@@ -214,9 +214,49 @@ async function fetchBookings() {
         if (result.status === "success") {
             allBookings = result.data;
             renderBookings();
-            if (selectedDates.length > 0) updateBookingRows();
+            
+            // Only update badges in existing rows to prevent losing input focus/values
+            if (selectedDates.length > 0) {
+                refreshAvailabilityBadges();
+            }
         }
     } catch (e) { console.error("Fetch Error:", e); }
+}
+
+function refreshAvailabilityBadges() {
+    const container = document.getElementById('booking-days-container');
+    const carType = document.getElementById('car_type').value;
+    if (!container || !carType) return;
+
+    const rows = container.querySelectorAll('.day-row');
+    // If row count mismatch, it means dates were changed, we need a full render (handled by flatpickr onChange)
+    if (rows.length !== selectedDates.length) return;
+
+    selectedDates.forEach((dateStr, index) => {
+        const row = rows[index];
+        if (!row) return;
+
+        const dateISO = getISODate(dateStr);
+        const occupied = getOccupiedTimes(dateISO, carType);
+        
+        let driverWarning = "";
+        if (carType === 'VIOS' || carType === 'BYD') {
+            const golfOccupied = allBookings.filter(b => {
+                if (b.status === 'cancelled' || getISODate(b.date) !== dateISO) return false;
+                const isGolfJob = (b.car_type === 'VIOS' || b.car_type === 'BYD') && (b.dropoff === 'ใช้คนขับ' || b.dropoff.includes('คนขับ'));
+                const isGolfLeave = (b.car_type === 'หยุดงาน' && b.dropoff === 'คนขับรถเก๋ง (คุณกอล์ฟ)');
+                return isGolfJob || isGolfLeave;
+            }).map(b => b.time_slot);
+            if (golfOccupied.length > 0) driverWarning = `<div class="occupied-badge" style="background:#FFF9E6; color:#B08800; border-color:#FFE58F;">⚠️ Driver Occupied: ${golfOccupied.join(', ')}</div>`;
+        }
+
+        const occupiedHtml = occupied.length > 0 ? `<div class="occupied-badge">🚫 Booked: ${occupied.join(', ')}</div>` : `<div class="occupied-badge" style="background:#EAF9EE; color:#1E7E34; border-color:#B7EB8F;">✅ Available</div>`;
+
+        const badgeArea = row.querySelector('.badge-area');
+        if (badgeArea) {
+            badgeArea.innerHTML = `${occupiedHtml}${driverWarning}`;
+        }
+    });
 }
 
 function getISODate(dateVal) {
@@ -302,7 +342,7 @@ function updateBookingRows() {
         row.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #EEF2F4; padding-bottom:10px;">
                 <span style="font-weight:700; color:var(--primary);">📅 Date: ${displayDate}</span>
-                <div style="display:flex; gap:8px;">${occupiedHtml}${driverWarning}</div>
+                <div class="badge-area" style="display:flex; gap:8px;">${occupiedHtml}${driverWarning}</div>
             </div>
             <div class="filters" style="background:transparent; border:none; padding:0; gap:12px;">
                 <div class="form-group" style="padding:0; flex:1;">
@@ -348,11 +388,19 @@ function toggleCustomTime(select, index) {
     customTimeDiv.style.display = (select.value === 'กำหนดเวลาเอง') ? "block" : "none";
 }
 
+let lastRenderState = "";
+
 function renderBookings() {
     const filterDate = document.getElementById('filter-date').value;
     const filterCar = document.getElementById('filter-car').value;
-    const list = document.getElementById('booking-list');
     const currentUser = JSON.parse(localStorage.getItem('jarvis_user'));
+    
+    // Create a state key to check if we actually need to re-render the table
+    const currentState = JSON.stringify(allBookings) + filterDate + filterCar + (currentUser ? currentUser.role : "");
+    if (lastRenderState === currentState) return;
+    lastRenderState = currentState;
+
+    const list = document.getElementById('booking-list');
     list.innerHTML = "";
 
     const filtered = allBookings.filter(b => {
